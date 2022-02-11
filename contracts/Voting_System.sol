@@ -2,12 +2,13 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 
 /** 
  *  @title A voting system
  *  @author Starloss
  */
-contract VotingSystem is Ownable {
+contract VotingSystem is Ownable, ReentrancyGuard {
 
     /// VARIABLES
     /** 
@@ -49,7 +50,7 @@ contract VotingSystem is Ownable {
     uint public totalElections = 0;
 
     /**
-     *  @notice Storage for voters and elections
+     *  @notice Storage for votes, voters and elections
      */
     mapping(address => Voter) public voters;
     mapping(uint => Election) public elections;
@@ -59,7 +60,7 @@ contract VotingSystem is Ownable {
     /**
      *  @notice Enum used for tracking the state of the election
      */
-    enum State { CREATED, VOTING, ENDED }
+    enum State { OPEN, CLOSED }
 
     /// EVENTS
     /**
@@ -82,12 +83,12 @@ contract VotingSystem is Ownable {
     /**
      *  @notice Event emitted when an Election is finished
      */
-    event ElectionFinished(uint _electionID, uint[] _counters, uint[] _candidates, address _winner);
+    event ElectionFinished(uint _electionID, uint[] _counters, address[] _candidates);
 
     /**
      *  @notice Event emitted when an vote is casted
      */
-    event VoteCasted(uint _electionID, address _choise);
+    event VoteCasted(uint _electionID, address _choice);
 
     /// MODIFIERS
     /**
@@ -105,10 +106,32 @@ contract VotingSystem is Ownable {
     }
 
     /**
+     *  @notice Modifier function that verifies the valid status of the choice
+     *  @notice The choice cannot be the same as msg.sender and has to be in the candidates array of the election
+     *  @notice Every voter can only vote once per election
+     */
+    modifier choiceVerification(uint _electionID, address _candidate) {
+        require(_candidate != msg.sender, "You cannot vote for yourself");
+        require(votes[_electionID][voters[msg.sender].uid].voterUID == 0, "You can only vote once per election.");
+
+        bool found = false;
+
+        for (uint i = 0; i < elections[_electionID].candidates.length; i++) {
+            if (_candidate == elections[_electionID].candidates[i]) {
+                found = true;
+            }
+        }
+
+        require(found, "This person is not a candidate in this election");
+
+        _;
+    }
+
+    /**
      *  @notice Modifier function that verifies if the voter exist in the system
      */
     modifier exist(address _voter) {
-        require(bytes(voters[_voter].voterName).length != 0);
+        require(bytes(voters[_voter].voterName).length != 0, "The user is not registered in the system.");
         _;
     }
 
@@ -116,7 +139,7 @@ contract VotingSystem is Ownable {
      *  @notice Modifier function that verifies if the voter doesn't exist in the system
      */
     modifier notExist(address _voter) {
-        require(bytes(voters[_voter].voterName).length == 0);
+        require(bytes(voters[_voter].voterName).length == 0, "The user is already registered in the system.");
         _;
     }
 
@@ -125,6 +148,22 @@ contract VotingSystem is Ownable {
      */
     modifier onlyBefore(uint _electionID) {
         require(elections[_electionID].endTime > block.timestamp, "The time for vote has finished.");
+        _;
+    }
+
+    /**
+     *  @notice Modifier function that verifies if the election has ended already
+     */
+    modifier onlyAfter(uint _electionID) {
+        require(elections[_electionID].endTime < block.timestamp, "The time for vote has finished.");
+        _;
+    }
+
+    /**
+     *  @notice Modifier function that verifies if the election is open
+     */
+    modifier onlyOpen(uint _electionID) {
+        require(elections[_electionID].state == State.OPEN, "Election has already been closed.");
         _;
     }
 
@@ -145,11 +184,11 @@ contract VotingSystem is Ownable {
     function register(string memory _voterName) public notExist(msg.sender) {
         require(bytes(_voterName).length != 0);
     
-        Voter memory v;
-        v.voterName = _voterName;
-        v.uid = totalVoters;
-        voters[msg.sender] = v;
         totalVoters++;
+        Voter memory newVoter;
+        newVoter.uid = totalVoters;
+        newVoter.voterName = _voterName;
+        voters[msg.sender] = newVoter;
         
         emit VoterRegistered(totalVoters);
     }
@@ -169,16 +208,17 @@ contract VotingSystem is Ownable {
         onlyOwner
         candidatesVerification(_candidates)
     {
-        uint[] memory _counters;
+        uint[] memory _counters = new uint[](_candidates.length);
+
         Election memory newElection;
         newElection.uid = totalElections;
-        newElection.endTime = block.timestamp + 604800;
+        newElection.endTime = block.timestamp + 1 weeks;
         newElection.totalVotes = 0;
         newElection.counters = _counters;
         newElection.title = _title;
         newElection.description = _description;
         newElection.candidates = _candidates;
-        newElection.state = State.CREATED;
+        newElection.state = State.OPEN;
         elections[totalElections] = newElection;
 
         emit ElectionCreated(totalElections, block.timestamp, newElection.endTime, _title, _description, _candidates);
@@ -190,12 +230,45 @@ contract VotingSystem is Ownable {
      *  @notice Function that allows the user vote in an election
      *  @dev Every address could only call this function once for every election
      *  @param _electionID must be an integer representing the ID of the election created by the owner
-     *  @param _choise is the address of the account who the user wants to win the election
+     *  @param _choice is the address of the account who the user wants to win the election
      */
-    function doVote(uint _electionID, address _choise)
+    function doVote(uint _electionID, address _choice)
         public
+        nonReentrant
         exist(msg.sender)
         onlyBefore(_electionID)
+        choiceVerification(_electionID, _choice)
     {
+        Vote memory newVote;
+        newVote.choice = _choice;
+        newVote.voterUID = voters[msg.sender].uid;
+        votes[_electionID][newVote.voterUID] = newVote;
+        
+        for(uint i = 0; i < elections[_electionID].candidates.length; i++) {
+            if (elections[_electionID].candidates[i] == _choice) {
+                elections[_electionID].counters[i]++;
+                elections[_electionID].totalVotes++;
+            }
+        }
+
+        emit VoteCasted(_electionID, _choice);
+    }
+
+    /**
+     *  @notice Function that allows the owner to close the election
+     *  @notice Every election can be closed only 1 week after his start date
+     *  @param _electionID must be an integer representing the ID of the election created by the owner
+     */
+    function endElection(uint _electionID)
+        public
+        onlyOwner
+        onlyOpen(_electionID)
+        onlyAfter(_electionID)
+    {
+        elections[_electionID].state = State.CLOSED;
+
+        address[] memory candidates = elections[_electionID].candidates;
+
+        emit ElectionFinished(_electionID, elections[_electionID].counters, candidates);
     }
 }
