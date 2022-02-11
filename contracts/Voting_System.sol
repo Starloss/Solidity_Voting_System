@@ -13,7 +13,7 @@ contract VotingSystem is Ownable {
     /** 
      *  @notice Struct used to store the votes in the system
      */
-    struct vote {
+    struct Vote {
         uint voterUID;
         address choice;
     }
@@ -23,7 +23,7 @@ contract VotingSystem is Ownable {
      *  @notice Only can access to this data if you know the address
      *  @dev We need to improve the privacy of the voter
      */
-    struct voter {
+    struct Voter {
         uint uid;
         string voterName;
     }
@@ -31,14 +31,14 @@ contract VotingSystem is Ownable {
     /**
      *  @notice Struct used to store the elections in the system
      */
-    struct election {
+    struct Election {
         uint uid;
         uint endTime;
+        uint totalVotes;
         uint[] counters;
         string title;
         string description;
         address[] candidates;
-        mapping(uint => vote) votes;
         State state;
     }
 
@@ -51,8 +51,9 @@ contract VotingSystem is Ownable {
     /**
      *  @notice Storage for voters and elections
      */
-    mapping(address => voter) public voters;
-    mapping(uint => election) public elections;
+    mapping(address => Voter) public voters;
+    mapping(uint => Election) public elections;
+    mapping(uint => mapping(uint => Vote)) public votes;
 
     /// STATES
     /**
@@ -144,7 +145,7 @@ contract VotingSystem is Ownable {
     function register(string memory _voterName) public notExist(msg.sender) {
         require(bytes(_voterName).length != 0);
     
-        voter memory v;
+        Voter memory v;
         v.voterName = _voterName;
         v.uid = totalVoters;
         voters[msg.sender] = v;
@@ -156,12 +157,33 @@ contract VotingSystem is Ownable {
     /**
      *  @notice Function that allows to the Owner create an election
      *  @param _candidates must be an array with 0 < length <= 5 of addresses registered in the System
+     *  @param _title must be an String with the Title of the election.
+     *  @param _description must be an String with the Description of the election.
      */
-    function createNewElection(address[] memory _candidates)
+    function createNewElection(
+        address[] memory _candidates,
+        string memory _title,
+        string memory _description
+    )
         public
         onlyOwner
         candidatesVerification(_candidates)
     {
+        uint[] memory _counters;
+        Election memory newElection;
+        newElection.uid = totalElections;
+        newElection.endTime = block.timestamp + 604800;
+        newElection.totalVotes = 0;
+        newElection.counters = _counters;
+        newElection.title = _title;
+        newElection.description = _description;
+        newElection.candidates = _candidates;
+        newElection.state = State.CREATED;
+        elections[totalElections] = newElection;
+
+        emit ElectionCreated(totalElections, block.timestamp, newElection.endTime, _title, _description, _candidates);
+
+        totalElections++;
     }
 
     /**
