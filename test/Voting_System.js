@@ -1,12 +1,26 @@
 const { expect } = require("chai");
-const { ethers, network } = require("hardhat");
+const { ethers, network, upgrades } = require("hardhat");
+
+describe("Upgrading Voting System", () => {
+    it("Should let upgrade the contract", async () => {
+        const votingSystemFactory = await ethers.getContractFactory("VotingSystem");
+        const votingSystemFactoryV2 = await ethers.getContractFactory("VotingSystemV2");
+    
+        const instance = await upgrades.deployProxy(votingSystemFactory, ["First Owner Name"]);
+        const upgraded = await upgrades.upgradeProxy(instance.address, votingSystemFactoryV2);
+        [owner, _] = await ethers.getSigners();
+    
+        const ownerVoter = await upgraded.voters(owner.address);
+        expect(ownerVoter.voterName).to.equal("First Owner Name");
+    });
+});
 
 describe("Voting System contract", () => {
-    let VotingSystemFactory, VotingSystem, owner, addr1, addr2, addr3, addr4, addr5, addr6, addr7, addr8, addr9;
+    let votingSystemFactory, VotingSystem, owner, addr1, addr2, addr3, addr4, addr5, addr6, addr7, addr8, addr9;
 
     beforeEach(async () => {
-        VotingSystemFactory = await ethers.getContractFactory("VotingSystem");
-        VotingSystem = await VotingSystemFactory.deploy("Owner First Name");
+        votingSystemFactory = await ethers.getContractFactory("VotingSystem");
+        VotingSystem = await upgrades.deployProxy(votingSystemFactory, ["First Owner Name"]);
         [owner, addr1, addr2, addr3, addr4, addr5, addr6, addr7, addr8, addr9, _] = await ethers.getSigners();
     });
 
@@ -18,7 +32,7 @@ describe("Voting System contract", () => {
         it("Should set the owner as the first voter", async () => {
             const ownerVoter = await VotingSystem.voters(owner.address);
             expect(ownerVoter.uid).to.equal(1);
-            expect(ownerVoter.voterName).to.equal("Owner First Name");
+            expect(ownerVoter.voterName).to.equal("First Owner Name");
         });
     });
 

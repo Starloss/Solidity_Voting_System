@@ -8,7 +8,7 @@ import '@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
  *  @title A voting system
  *  @author Starloss
  */
-contract VotingSystem is OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract VotingSystemV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// VARIABLES
     /** 
@@ -169,16 +169,9 @@ contract VotingSystem is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// FUNCTIONS
     /**
-     *  @notice Constructor function that initialice the contract and register the owner as first voter
-     *  @param _ownerName must be an string with length > 0, wich will be used to register the owner as a voter
+     *  @notice Constructor function that initialize the V2 contract
      */
-    function initialize(string memory _ownerName) public initializer {
-        __Ownable_init();
-        __ReentrancyGuard_init();
-        totalVoters = 0;
-        totalElections = 0;
-        register(_ownerName);
-    }
+    function initialize() public initializer {}
 
     /**
      *  @notice Function that allows to register a voter with a name
