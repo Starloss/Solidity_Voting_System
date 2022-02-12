@@ -111,7 +111,7 @@ contract VotingSystem is Ownable, ReentrancyGuard {
      *  @notice Every voter can only vote once per election
      */
     modifier choiceVerification(uint _electionID, address _candidate) {
-        require(_candidate != msg.sender, "You cannot vote for yourself");
+        require(_candidate != msg.sender, "You cannot vote for yourself.");
         require(votes[_electionID][voters[msg.sender].uid].voterUID == 0, "You can only vote once per election.");
 
         bool found = false;
@@ -122,7 +122,7 @@ contract VotingSystem is Ownable, ReentrancyGuard {
             }
         }
 
-        require(found, "This person is not a candidate in this election");
+        require(found, "This person is not a candidate in this election.");
 
         _;
     }
@@ -155,7 +155,7 @@ contract VotingSystem is Ownable, ReentrancyGuard {
      *  @notice Modifier function that verifies if the election has ended already
      */
     modifier onlyAfter(uint _electionID) {
-        require(elections[_electionID].endTime < block.timestamp, "The time for vote has finished.");
+        require(elections[_electionID].endTime < block.timestamp, "The time for vote hasn't finished.");
         _;
     }
 
@@ -182,7 +182,7 @@ contract VotingSystem is Ownable, ReentrancyGuard {
      *  @param _voterName must be an string with length > 0
      */
     function register(string memory _voterName) public notExist(msg.sender) {
-        require(bytes(_voterName).length != 0);
+        require(bytes(_voterName).length != 0, "You have to provide a name.");
     
         totalVoters++;
         Voter memory newVoter;
@@ -210,6 +210,7 @@ contract VotingSystem is Ownable, ReentrancyGuard {
     {
         uint[] memory _counters = new uint[](_candidates.length);
 
+        totalElections++;
         Election memory newElection;
         newElection.uid = totalElections;
         newElection.endTime = block.timestamp + 1 weeks;
@@ -222,8 +223,6 @@ contract VotingSystem is Ownable, ReentrancyGuard {
         elections[totalElections] = newElection;
 
         emit ElectionCreated(totalElections, block.timestamp, newElection.endTime, _title, _description, _candidates);
-
-        totalElections++;
     }
 
     /**
@@ -270,5 +269,13 @@ contract VotingSystem is Ownable, ReentrancyGuard {
         address[] memory candidates = elections[_electionID].candidates;
 
         emit ElectionFinished(_electionID, elections[_electionID].counters, candidates);
+    }
+
+    function getCounterElection(uint _electionID, uint index) public view returns (uint) {
+        return elections[_electionID].counters[index];
+    }
+
+    function getCandidateElection(uint _electionID, uint index) public view returns (address) {
+        return elections[_electionID].candidates[index];
     }
 }
